@@ -60,16 +60,12 @@ class MelSpectrogram_ONNX(nn.Module):
 class RMVPE_ONNX(nn.Module):
     def __init__(self, hop_length):
         super().__init__()
+        self.hop_length = hop_length
+        self.seg_length = 32 * hop_length
         self.model = E2E0(4, 1, (2, 2))
         self.mel_extractor = MelSpectrogram_ONNX(
             N_MELS, SAMPLE_RATE, WINDOW_LENGTH, hop_length, None, MEL_FMIN, MEL_FMAX
         )
-
-    def mel2hidden(self, mel):
-        n_frames = mel.shape[-1]
-        mel = F.pad(mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode='reflect')
-        hidden = self.model(mel)  # [B, T, N]
-        return hidden[:, :n_frames]
 
     # noinspection PyMethodMayBeStatic
     def decode(self, hidden, threshold=0.03):
@@ -88,9 +84,14 @@ class RMVPE_ONNX(nn.Module):
         return f0 * ~uv, uv
 
     def forward(self, waveform, threshold):
+        B, T = waveform.shape
+        n_frames = T // self.hop_length + 1 
+        T1 = T + self.hop_length
+        T_pad = self.seg_length * ((T1 - 1) // self.seg_length + 1) - T1
+        waveform = F.pad(waveform, (0, T_pad))
         mel = self.mel_extractor(waveform, center=True)
-        hidden = self.mel2hidden(mel)
-        f0, uv = self.decode(hidden, threshold=threshold)
+        hidden = self.model(mel)
+        f0, uv = self.decode(hidden[:, :n_frames], threshold=threshold)
         return f0, uv
 
 
