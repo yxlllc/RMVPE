@@ -173,7 +173,7 @@ def export():
     rmvpe = RMVPE_ONNX(hop_length=cmd.hop_length)
     rmvpe.model.load_state_dict(torch.load(model_path)['model'])
     rmvpe.eval().to(device)
-    waveform = torch.randn(1, 114514, dtype=torch.float32, device=device).clip(min=-1., max=1.)
+    waveform = torch.randn(2, 114514, dtype=torch.float32, device=device).clip(min=-1., max=1.)
     threshold = torch.tensor(0.03, dtype=torch.float32, device=device)
     print('start exporting ...')
     with torch.no_grad():
@@ -194,12 +194,15 @@ def export():
             ],
             dynamic_axes={
                 'waveform': {
+                    0: 'batch_size',
                     1: 'n_samples'
                 },
                 'f0': {
+                    0: 'batch_size',
                     1: 'n_frames'
                 },
                 'uv': {
+                    0: 'batch_size',
                     1: 'n_frames'
                 }
             },
@@ -210,10 +213,6 @@ def export():
         import onnxsim
         print('start optimizing ...')
         model = onnx.load(output_path)
-        onnx_override_io_shapes(model, output_shapes={
-            'f0': (1, 'n_frames'),
-            'uv': (1, 'n_frames'),
-        })
         model, check = onnxsim.simplify(
             model,
             include_subgraph=True
